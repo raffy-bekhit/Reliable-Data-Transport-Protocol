@@ -1,56 +1,33 @@
-import socket
+from socket import socket
 import struct
 import threading
+from structures import packet
 
 def resend(my_socket,packet):
     my_socket.send(packet)
 
 
+class Client:
 
-class packet:
-
-    def __init__(self,length,seqno,data):
-        self.length = struct.pack('H',length)
-        self.seqno=struct.pack('I',seqno)
-        self.data=data
-
-        #data yet
-
-
-input_file = open("client_input.txt",'r') #read the data of the client
-server_ip = input_file.readline().split('\n')[0]
-server_port = int(input_file.readline())
-client_port = int(input_file.readline())
-requested_filename = input_file.readline().split('\n')[0]
-window_size = int(input_file.readline())#how many datagrams
-input_file.close()
+    def __init__(self,file_name):
+        input_file = open(file_name,'r') #read the data of the client
+        self.server_ip = input_file.readline().split('\n')[0]
+        self.server_port = int(input_file.readline())
+        self.client_port = int(input_file.readline())
+        self.requested_filename = input_file.readline().split('\n')[0]
+        self.window_size = int(input_file.readline())#how many datagrams
+        input_file.close()
 
 
+    def fork_n_clients(self,file_name,n=10):
+        for i in range(0,n):
+            cl = Client(file_name)
+            cl_socket = socket(socket.AF_INET, socket.SOCK_DGRAM)
+            cl_socket.connect((cl.server_ip,cl.server_port))
+            cl_packet = packet(seqno=0,data=cl.requested_filename)
+            pkd_packet = cl_packet.pack()
+            cl_socket.send(pkd_packet)
+            cl_socket.close()
 
 
-
-
-my_socket =socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-my_socket.connect((server_ip,server_port))
-
-my_packet = packet(len(requested_filename),0,requested_filename)
-
-my_socket.send(my_packet)
-
-timer = threading.Timer(10,resend,args=[my_socket,my_packet])
-
-timer.start()
-
-while()
-
-
-
-
-#for i in range(30):
-#   s.append( socket.socket(socket.AF_INET,socket.SOCK_STREAM))      # Create a socket object)
-#    host = socket.gethostname() # Get local machine name
-#port = 12348            # Reserve a port for your service.
-#s[i].connect((host,port))
-# rec=s[i].recv(1024)
-#  print(rec)
-#
+Client.fork_n_clients('client.in',20)
