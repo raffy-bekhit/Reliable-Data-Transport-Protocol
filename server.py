@@ -5,6 +5,10 @@ host = socket.gethostname() # Get local machine name
 
 file = open('server.in','r')
 
+port = int(file.readline())
+window_size = int(file.readline()) #in datagrams
+random_seed = int(file.readline())
+probability = float(file.readline())
 
 
 port = 12348             # Reserve a port for your service.
