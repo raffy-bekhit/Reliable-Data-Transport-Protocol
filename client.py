@@ -6,42 +6,48 @@ def resend(my_socket,packet):
     my_socket.send(packet)
 
 
-
-class packet:
+class Packet:
 
     def __init__(self,length,seqno,data):
-        self.length = struct.pack('H',length)
-        self.seqno=struct.pack('I',seqno)
+        self.length = length
+        self.seqno=seqno
         self.data=data
 
         #data yet
 
+class Client:
 
-input_file = open("client_input.txt",'r') #read the data of the client
-server_ip = input_file.readline().split('\n')[0]
-server_port = int(input_file.readline())
-client_port = int(input_file.readline())
-requested_filename = input_file.readline().split('\n')[0]
-window_size = int(input_file.readline())#how many datagrams
-input_file.close()
-
-
-
-
+    def __init__(self,file_name):
+        input_file = open(file_name,'r') #read the data of the client
+        self.server_ip = input_file.readline().split('\n')[0]
+        self.server_port = int(input_file.readline())
+        self.client_port = int(input_file.readline())
+        self.requested_filename = input_file.readline().split('\n')[0]
+        self.window_size = int(input_file.readline())#how many datagrams
+        input_file.close()
 
 
+
+
+
+
+cl = Client("client.in")
 my_socket =socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-my_socket.connect((server_ip,server_port))
+my_socket.connect((cl.server_ip,cl.server_port))
+my_packet = Packet(len(cl.requested_filename),0,('hamadadadadaadada'))
+lent = len(my_packet.data.encode())
+formats = "HI%ds" %lent
+packet_bytes = struct.pack(formats,my_packet.length,my_packet.seqno,my_packet.data.encode())
+print(packet_bytes)
 
-my_packet = packet(len(requested_filename),0,requested_filename)
+my_socket.send(packet_bytes)
 
-my_socket.send(my_packet)
+print(my_socket.recv(cl.server_port))
+# timer = threading.Timer(10,resend,args=[my_socket,my_packet])
 
-timer = threading.Timer(10,resend,args=[my_socket,my_packet])
+# timer.start()
 
-timer.start()
-
-while()
+# while()
 
 
 
