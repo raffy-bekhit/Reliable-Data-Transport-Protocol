@@ -18,10 +18,12 @@ def send_stop_wait(server_socket,client_addr,filename):
          buffer = file_content[start_index:end_index]
       else:
          buffer = file_content[start_index:]
-      my_packet = structures.packet(seqno=0,length=len(buffer),data=buffer)
-      server_socket.sendto(my_packet,addr)
 
-      server_socket.sendto()
+      my_packet = structures.packet(seqno=0,data=buffer)
+      packed_packet = my_packet.pack()
+      server_socket.sendto(packed_packet,addr)
+
+      server_socket.recv()
 
 
 
@@ -31,7 +33,7 @@ def send_stop_wait(server_socket,client_addr,filename):
 
 
 s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)         # Create a socket object
-host = socket.gethostname() # Get local machine name
+host = '127.0.0.1' # Get local machine name
 
 file = open('server.in','r')
 
@@ -47,22 +49,22 @@ s.bind((host, port))        # Bind to the port
 
 
 
-s.recvfrom(connections_number) # Now wait for client connection.
+#s.recvfrom(connections_number) # Now wait for client connection.
 
 
 
 while True:
 
 
-   request_data, addr = s.recvfrom(500)     # Establish connection with client.
-   pid = os.fork()
+    request_data, addr = s.recvfrom(600)    # Establish connection with client.
 
-   request_packet = structures.packet(packed_data = request_packet)
-
-   if(pid == 0):
-      send_stop_wait(s,addr,data)
+    pid = os.fork()
+    request_packet = structures.packet(pkd_data=request_data)
 
 
 
 
+    if(pid == 0):
+        #print(request_packet.checksum)
+        send_stop_wait(s,addr,request_packet.data)
 
