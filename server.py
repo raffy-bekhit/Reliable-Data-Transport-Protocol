@@ -59,12 +59,13 @@ while True:
     request_data, addr = s.recvfrom(600)    # Establish connection with client.
 
     pid = os.fork()
-    request_packet = structures.packet(pkd_data=request_data)
+
 
 
 
 
     if(pid == 0):
-        #print(request_packet.checksum)
-        send_stop_wait(s,addr,request_packet.data)
+        request_packet = structures.packet(pkd_data=request_data)
+        print(hex(request_packet.checksum))
+        #send_stop_wait(s,addr,request_packet.data)
 
