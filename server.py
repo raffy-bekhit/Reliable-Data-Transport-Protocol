@@ -62,10 +62,8 @@ while True:
 
 
 
-
-
     if(pid == 0):
         request_packet = structures.packet(pkd_data=request_data)
-        print(hex(request_packet.checksum))
+        os.kill(os.getpid(),0)
         #send_stop_wait(s,addr,request_packet.data)
 
