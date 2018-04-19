@@ -1,3 +1,4 @@
+import signal
 import socket               # Import socket module
 import os
 import structures
@@ -5,30 +6,26 @@ import structures
 
 packet_size = 500
 
-def send_stop_wait(server_socket,client_addr,filename):
-   file = open(filename,'r')
-   file_content = file.read()
-   packet_number =  0 ;
-   buffer= ""
-   seqno = 0
-   while(packet_number<len(file_content)%packet_size):
-      start_index = packet_number*packet_size
-      end_index = packet_number * packet_size + packet_size - 1
-      if(end_index<=len(file_content)):
-         buffer = file_content[start_index:end_index]
-      else:
-         buffer = file_content[start_index:]
+def send_stop_wait(server_socket,filename):
+    file = open(filename,'r')
+    file_content = file.read()
+    packet_number =  0 ;
+    buffer= ""
+    seqno = 0
+    
+    while(packet_number<len(file_content)/packet_size):
+        start_index = packet_number*packet_size
+        end_index = packet_number * packet_size + packet_size - 1
+        if(end_index<len(file_content)):
+            buffer = file_content[start_index:end_index]
+        else:
+            buffer = file_content[start_index:]
 
-      my_packet = structures.packet(seqno=0,data=buffer)
-      packed_packet = my_packet.pack()
-      server_socket.sendto(packed_packet,addr)
+        my_packet = structures.packet(seqno=0,data=buffer)
+        packed_packet = my_packet.pack()
+        server_socket.sendto(packed_packet,addr)
+        packet_number=packet_number+1
 
-      server_socket.recv()
-
-
-
-   while():
-      structures.packet(seqno=0  )
 
 
 
@@ -63,7 +60,12 @@ while True:
 
 
     if(pid == 0):
-        request_packet = structures.packet(pkd_data=request_data)
+        if(len(request_data)>8):
+            request_packet = structures.packet(pkd_data=request_data)
+            send_stop_wait(s, request_packet.data)
+
         os.kill(os.getpid(),0)
-        #send_stop_wait(s,addr,request_packet.data)
+
+
+
 

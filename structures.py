@@ -25,8 +25,21 @@ def calc_checksum(data):
 
 
 class ack:
-    def __init__(self,checksum=0):
-        self.checksum=checksum
+    def __init__(self,checksum=0,pkd_data=None):
+
+        if pkd_data:
+            var = self.unpack(pkd_data)
+            checksum = var[0]
+
+        else:
+            self.checksum=checksum
+
+    def pack(self):
+        return struct.pack('H',self.checksum)
+
+    def unpack(self,pkd_data):
+        return struct.unpack('H',pkd_data)
+
 
 class packet:
 

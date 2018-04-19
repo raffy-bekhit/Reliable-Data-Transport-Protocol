@@ -2,6 +2,7 @@ import socket
 import struct
 import threading
 from structures import packet
+import structures
 
 def resend(my_socket,packet):
     my_socket.send(packet)
@@ -38,6 +39,17 @@ class Client:
 
 client = Client('client.in')
 client.send_request()
+
+
+while True:
+
+    received_pack , addr=client.my_socket.recvfrom(600)
+    received_packet = packet(pkd_data=received_pack)
+    if(received_packet.checksum==structures.calc_checksum(received_packet.data)):
+        print(received_packet.data)
+        ack_packet = structures.ack(checksum=received_packet.checksum)
+        client.my_socket.send(ack_packet.pack())
+
 
 client.my_socket.close()
 #timeout = threading.Timer(10,client.send_request)
