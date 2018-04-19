@@ -43,13 +43,18 @@ class ack:
 
 class packet:
 
-    def __init__(self,pkd_data=None,length=0,seqno=0,data=''):
+    def __init__(self,pkd_data=None,length=0,seqno=0,data='',type='string'):
         if pkd_data:
             var, data = self.unpack(pkd_data)
             self.checksum = var[0]
             self.length = var[1]
             self.seqno = var[2]
             self.data = data.decode()
+        if type == 'bytes':
+            self.length = len(data)+8
+            self.seqno = seqno
+            self.data = data
+            self.checksum = calc_checksum(data)
         else:
             self.length = len(data.encode())+8
             self.seqno = seqno
@@ -60,8 +65,10 @@ class packet:
         size = struct.calcsize('HHI')
         return struct.unpack('HHI', data[:size]), data[size:]
 
-    def pack(self):
+    def pack(self,type='string'):
         encoded_data = self.data.encode()
+        if type == 'bytes':
+            encoded_data = self.date
         str_len = len(encoded_data)
         #packet_length = self.length
         fmt ='HHI%ds' %str_len

@@ -28,15 +28,6 @@ class Client:
         self.my_socket.send(request_pack)
 
 
-    #def fork_n_clients(self,file_name,n=10):
-    #    for i in range(0,n):
-    #        cl = Client(file_name)
-
-
-
-            #cl_socket.close()
-
-
 client = Client('client.in')
 client.send_request()
 
