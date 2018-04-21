@@ -56,7 +56,7 @@ class packet:
             self.data = data
             self.checksum = calc_checksum(data)
         else:
-            self.length = len(data.encode())+8
+            self.length = len(data)+8
             self.seqno = seqno
             self.data = data
             self.checksum = calc_checksum(data)

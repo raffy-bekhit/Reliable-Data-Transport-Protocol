@@ -3,11 +3,14 @@ import socket               # Import socket module
 import os
 import structures
 from structures import packet
-
+import time
 
 packet_size = 500
+acks={}
 
-def send_stop_wait(server_socket,filename):
+
+
+def send_stop_wait(server_socket,filename,addr):
     file = open(filename,'r')
     file_content = file.read()
     packet_number =  0 ;
@@ -25,6 +28,14 @@ def send_stop_wait(server_socket,filename):
         my_packet = structures.packet(seqno=0,data=buffer)
         packed_packet = my_packet.pack()
         server_socket.sendto(packed_packet,addr)
+        start_time = time.clock()
+
+        while (time.clock()-start_time <=30): #timeout
+            if(addr in acks.keys()):
+                if(acks[addr]==1):
+                    acks[addr]=0
+                    break
+
         packet_number=packet_number+1
 
 
@@ -64,29 +75,32 @@ def go_back_n(file_name,server_socket,client_address,windows_size):
 
 
 
-s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # Create a socket object
-host = '127.0.0.1' # Get local machine name
+s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # Create a socket object (udp)
+host = '127.0.0.1' # localhost ip
 
-file = open('server.in','r')
+file = open('server.in','r') #open file containing data about server
 port = int(file.readline())
 window_size = int(file.readline()) #in datagrams
 random_seed = int(file.readline())
 probability = float(file.readline())
-connections_number = int(file.readline())
+
 
 s.bind((host, port))        # Bind to the port
 
-# s.recvfrom(connections_number) # Now wait for client connection.
+
 
 while True:
 
-    request_data, addr = s.recvfrom(600)    # Establish connection with client.
+    request_data, addr = s.recvfrom(600)    # receives packet from clients
+    if(len(request_data)<=8): #decies if packet is ack
+        acks[addr] = 1
 
-    pid = os.fork()
+    else:
+        pid = os.fork() #forks a child process to send requested file
 
-    if(pid == 0):
-        if(len(request_data)>8):
+        if(pid == 0):
+
             request_packet = structures.packet(pkd_data=request_data)
-            send_stop_wait(s, request_packet.data)
+            send_stop_wait(s, request_packet.data,addr)
 
-        os.kill(os.getpid(),0)
+            os.kill(os.getpid(),0)
