@@ -6,7 +6,7 @@ from structures import packet
 import time
 import multiprocessing
 import enum
-from structures import packet
+from structures import packet,ack
 
 packet_size = 500
 
@@ -61,76 +61,84 @@ def send_stop_wait(server_socket,filename,client_addr):
             send=True
 
 
-
-
-
-
-
 def get_bytes_from_file(file_name):
-    return open(file_name,'rb').read()
+    return open(file_name, 'rb').read()
 
 
-def go_back_n(file_name,server_socket,client_address,windows_size):
+def get_packets_from_file(file_name):
     file_bytes = get_bytes_from_file(file_name)
     file_length = len(file_bytes)
     seq_count = 0
     pkt_list = []
     for i in range(0, file_length, 500):
-        if i+500 > file_length:
-            pkt = packet(seqno=seq_count,data=file_bytes[i:],type='bytes')
+        if i + 500 > file_length:
+            pkt = packet(seqno=seq_count, data=file_bytes[i:], type='bytes')
         else:
-            pkt = packet(seqno=seq_count,data=file_bytes[i:i+500],type='bytes')
+            pkt = packet(seqno=seq_count, data=file_bytes[i:i + 500], type= 'bytes')
         pkt_list.append(pkt)
         seq_count += 1
-    for i in range(0,len(pkt_list)):
-        for w in range(i,window_size+i):
-            pkt =pkt_list[w]
-            pkd_packet = pkt.pack(type='bytes')
+    return pkt_list
+
+
+def go_back_n(file_name, server_socket, client_address, window_size=5):
+    pkt_list = get_packets_from_file(file_name)
+    flag = False
+    i = 0
+    while i < len(pkt_list):
+        current_pkt = pkt_list[i:window_size+i]
+        if window_size+i > len(pkt_list):
+            current_pkt = pkt_list[i:]
+        for pkt in current_pkt:
+            pkd_packet = pkt.pack_bytes()
             server_socket.sendto(pkd_packet,client_address)
-        for w in range(i,window_size+i):
-            pkt = pkt_list[w]
-            server_socket.settimeout(10)
+            if flag is True:
+                flag = False
+                break
+        for pkt in current_pkt:
             try:
-                ack = server_socket.recvfrom(client_address)
-                if ack.checksum == pkt.checksum:
+                ack_pkt = server_socket.recv(600)
+                unpkd_ack = ack(pkd_data=ack_pkt)
+                print('Ack# '+ str(unpkd_ack.seqno) + ' received')
+                if unpkd_ack.checksum == pkt.checksum:
                     i += 1
                 else:
+                    flag = True
                     break
             except socket.timeout as e:
-                print('Packet #'+str(pkt.seqno)+'has timed out....resending')
+                print('Packet # '+str(pkt.seqno)+' ack has timed out....resending')
                 break
+
 
 def send_requested_file(client_addr,serving_port,filename,algorithm_number=algorithms.stop_and_wait):
     sending_socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     sending_socket.bind((host,serving_port))
-
+    print('Client: '+str(client_addr[1])+' connected... sending file.')
     #sending_socket.sendto(packet(data=str(serving_port),seqno=0).pack(),client_addr)
     send_stop_wait(sending_socket,filename,client_addr)
-
-
+    # go_back_n(filename,sending_socket,client_addr)
 
 
 s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # Create a socket object (udp)
 host = '127.0.0.1' # localhost ip
 
-file = open('server.in','r') #open file containing data about server
+file = open('server.in','r') # open file containing data about server
 port = int(file.readline())
-window_size = int(file.readline()) #in datagrams
+window_size = int(file.readline()) # in datagrams
 random_seed = int(file.readline())
 probability = float(file.readline())
 
 
 s.bind((host, port))        # Bind to the port
 #s.setblocking(1)
-clients = [] #list of online clients
+clients = []  # list of online clients
 
 
-serving_port = 49151 #port used to send the file
-used_ports=[] #list of ports used to send the file
+serving_port = 49151  # port used to send the file
+used_ports=[]  # list of ports used to send the file
 
 
 while True:
-
+    print('Waiting for connection... ')
     request_data, addr = s.recvfrom(1024)    # receives packet from clients
 
 
@@ -151,6 +159,5 @@ while True:
 
         request_packet = structures.packet(pkd_data=request_data) #create a request packet from received data
         #send_stop_wait(s, request_packet.data,addr)
-
-        send_requested_file(addr,serving_port,request_packet.data,algorithms.stop_and_wait)
+        send_requested_file(addr,serving_port,request_packet.data,algorithms.go_back_n)
         os.kill(os.getpid(),0)
