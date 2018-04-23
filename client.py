@@ -5,7 +5,7 @@ from structures import packet
 import structures
 
 def resend(my_socket,packet):
-    my_socket.send(packet)
+    my_socket.send(packet())
 
 
 class Client:
@@ -19,6 +19,7 @@ class Client:
         self.window_size = int(input_file.readline())#how many datagrams
         self.my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.my_socket.connect((self.server_ip,self.server_port))
+
         input_file.close()
 
 
@@ -30,20 +31,26 @@ class Client:
 
 client = Client('client.in')
 client.send_request()
+received_pack , addr =  client.my_socket.recvfrom(600)
+received_packet = packet(pkd_data=received_pack)
 
+server_new_port = int(received_packet.data)
 
+client.my_socket.connect((client.server_ip,server_new_port))
+
+seqno = 0
 while True:
 
-    received_pack , addr=client.my_socket.recvfrom(600)
+    received_pack , addr = client.my_socket.recvfrom(600)
     received_packet = packet(pkd_data=received_pack)
-    if(received_packet.checksum==structures.calc_checksum(received_packet.data)):
+    if(received_packet.checksum==structures.calc_checksum(received_packet.data) and received_packet.seqno==seqno):
         print(received_packet.data)
-        ack_packet = structures.ack(checksum=received_packet.checksum)
+        ack_packet = structures.ack(seqno= seqno,checksum=received_packet.checksum)
+        client.my_socket.send(ack_packet.pack())
+        seqno=(seqno+1)%2
+    elif(received_packet.seqno!= seqno):
         client.my_socket.send(ack_packet.pack())
 
 
+
 client.my_socket.close()
-#timeout = threading.Timer(10,client.send_request)
-
-#timeout.start()
-

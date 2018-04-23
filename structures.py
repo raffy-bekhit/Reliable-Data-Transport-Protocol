@@ -1,6 +1,11 @@
 import struct
 
 
+class reliable_socket:
+    def __init__(self,sock,ip):
+        self.my_socket = sock
+        self.ip = ip
+
 def calc_checksum(data):
     encoded_data = data.encode()
 
@@ -25,38 +30,35 @@ def calc_checksum(data):
 
 
 class ack:
-    def __init__(self,checksum=0,pkd_data=None):
+    def __init__(self,seqno=None,checksum=0,pkd_data=None):
 
         if pkd_data:
             var = self.unpack(pkd_data)
-            checksum = var[0]
+            self.seqno = var[1]
+            self.checksum = var[0]
 
         else:
+            self.seqno = seqno
             self.checksum=checksum
 
     def pack(self):
-        return struct.pack('H',self.checksum)
+        return struct.pack('HI',self.checksum,self.seqno)
 
     def unpack(self,pkd_data):
-        return struct.unpack('H',pkd_data)
+        return struct.unpack('HI',pkd_data)
 
 
 class packet:
 
-    def __init__(self,pkd_data=None,length=0,seqno=0,data='',type='string'):
+    def __init__(self,pkd_data=None,length=0,seqno=0,data=''):
         if pkd_data:
             var, data = self.unpack(pkd_data)
             self.checksum = var[0]
             self.length = var[1]
             self.seqno = var[2]
             self.data = data.decode()
-        if type == 'bytes':
-            self.length = len(data)+8
-            self.seqno = seqno
-            self.data = data
-            self.checksum = calc_checksum(data)
         else:
-            self.length = len(data)+8
+            self.length = len(data.encode())+8
             self.seqno = seqno
             self.data = data
             self.checksum = calc_checksum(data)
@@ -65,10 +67,8 @@ class packet:
         size = struct.calcsize('HHI')
         return struct.unpack('HHI', data[:size]), data[size:]
 
-    def pack(self,type='string'):
+    def pack(self):
         encoded_data = self.data.encode()
-        if type == 'bytes':
-            encoded_data = self.date
         str_len = len(encoded_data)
         #packet_length = self.length
         fmt ='HHI%ds' %str_len
