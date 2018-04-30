@@ -7,6 +7,9 @@ import time
 import multiprocessing
 import enum
 from structures import packet,ack
+import random
+from socket import timeout
+
 
 packet_size = 500
 
@@ -16,22 +19,75 @@ class algorithms(enum.Enum):
     go_back_n=1
     selevtive_repeat = 2
 
-acks = {}
+
+
+
+def lost_packets(total_packets,probability,seed):
+    "returns list of random packets to be lost for simulation"
+    random.seed(seed)
+    list = random.sample(range(total_packets),int(probability*total_packets))
+    list = [int(i) for i in list]
+    list.sort()
+    return list
+
+def readfile(filename):
+    "returns content of file as string"
+    file = open(filename, 'r')
+    file_content = file.read()
+    file.close()
+    return file_content
+
+def selective_repeat(server_socket,filename,client_addr):
+    file_content = readfile(filename)#string containing file content
+    packet_number = 0;
+    buffer = "" #divides file content into chunks of packet size
+    seqno = 0
+    send = True
+    server_socket.settimeout(5.0) #sets timeou
+    lost_list = lost_packets(len(file_content) // packet_size, probability, random_seed)
+    window = []
+
+    total_packets = len(file_content) / packet_size
+
+    while (packet_number < total_packets and len(window)<window_size): #fills window
+        start_index = packet_number * packet_size
+        end_index = packet_number * packet_size + packet_size - 1
+        if (end_index < len(file_content)):
+            buffer = file_content[start_index:end_index]
+        else:
+            buffer = file_content[start_index:]
+
+        send_packet = structures.packet(seqno=seqno, data=buffer)
+        packed_packet = send_packet.pack()
+
+        window.append(packed_packet)
+
+
+        seqno=seqno+1
+        packet_number=packet_number+1
+
+    for i in window:
+        server_socket.sendto(i, client_addr)
 
 
 
 
 def send_stop_wait(server_socket,filename,client_addr):
-    file = open(filename,'r')
-    file_content = file.read()
+    file_content = readfile(filename)
     packet_number =  0 ;
     buffer= ""
     seqno = 0
     send = True
-    server_socket.settimeout(30.0)
+    server_socket.settimeout(5.0)
+
+    lost_list = lost_packets(len(file_content)//packet_size , probability , random_seed)
+
     while(packet_number<len(file_content)/packet_size):
         
 
+        if(len(lost_list)>0 and packet_number==int(lost_list[0])):
+            lost_list.pop(0)
+            send = False
         if(send):
             send=False
             start_index = packet_number*packet_size
@@ -49,7 +105,7 @@ def send_stop_wait(server_socket,filename,client_addr):
             ack_pack , addr = server_socket.recvfrom(600)
 
 
-        except TimeoutError:
+        except timeout:
             send=True #resend
             continue
 
@@ -152,12 +208,12 @@ while True:
             serving_port=49151
     used_ports.append(serving_port)
     s.sendto(packet(data=str(serving_port), seqno=0).pack(),addr)
-    pid = os.fork() #fork a new process for the client
+   # pid = os.fork() #fork a new process for the client
 
 
-    if(pid == 0):
+   # if(pid == 0):
 
-        request_packet = structures.packet(pkd_data=request_data) #create a request packet from received data
-        #send_stop_wait(s, request_packet.data,addr)
-        send_requested_file(addr,serving_port,request_packet.data,algorithms.go_back_n)
-        os.kill(os.getpid(),0)
+    request_packet = structures.packet(pkd_data=request_data) #create a request packet from received data
+       #send_stop_wait(s, request_packet.data,addr)
+    send_requested_file(addr,serving_port,request_packet.data,algorithms.stop_and_wait)
+    os.kill(os.getpid(),0)
