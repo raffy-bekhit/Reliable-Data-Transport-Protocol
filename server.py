@@ -6,7 +6,7 @@ from structures import packet
 import time
 import multiprocessing
 import enum
-from structures import packet,ack
+from structures import packet,ack, calc_checksum
 import random
 from socket import timeout
 
@@ -135,9 +135,22 @@ def get_packets_from_file(file_name):
         seq_count += 1
     return pkt_list
 
+def send_file_len(socket, address, data,file_len):
+
+    print('Required file: ' + str(data))
+    req_file = str(data)
+    get_packets_from_file(req_file)
+    pkt = packet(seqno=0, data=((str(file_len)).encode()),type='bytes').pack_bytes()
+    socket.sendto(pkt, address)
+    ack, add = socket.recvfrom(600)
+    ack_p = packet(pkd_data=ack, type='ack')
+    if ack_p.checksum == calc_checksum(str(file_len)):
+        print('Received file length ack...')
+
 
 def go_back_n(file_name, server_socket, client_address, window_size=5):
     pkt_list = get_packets_from_file(file_name)
+    send_file_len(server_socket,client_address,file_name,len(pkt_list))
     flag = False
     i = 0
     while i < len(pkt_list):
@@ -154,14 +167,15 @@ def go_back_n(file_name, server_socket, client_address, window_size=5):
             try:
                 ack_pkt = server_socket.recv(600)
                 unpkd_ack = ack(pkd_data=ack_pkt)
-                print('Ack# '+ str(unpkd_ack.seqno) + ' received')
                 if unpkd_ack.checksum == pkt.checksum:
                     i += 1
+                    print('Ack# ' + str(unpkd_ack.seqno) + ' received')
                 else:
+                    print('Ack# ', unpkd_ack.seqno,' is corrupted/delayed..')
                     flag = True
                     break
             except socket.timeout as e:
-                print('Packet # '+str(pkt.seqno)+' ack has timed out....resending')
+                print('Ack # '+str(pkt.seqno)+' ack has timed out....resending')
                 break
 
 
