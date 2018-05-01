@@ -7,6 +7,19 @@ import structures
 def resend(my_socket,packet):
     my_socket.send(packet())
 
+def arrange_window(window,base):
+
+    temp1 = []
+    temp2 = []
+    window.sort()
+    for i in window:
+        if(i.seqno>=base):
+            temp1.append(i)
+        else:
+            temp2.append(i)
+    window=temp1+temp2
+    return
+
 
 class Client:
 
@@ -37,7 +50,59 @@ class Client:
         socket.send(ack_p)
         self.file_len = int(unpkd.data)
         print('Required file length = ', self.file_len, ' packets.')
+    ##################
+    def recv_selective_repeat(self,window_size):
 
+
+        packet_number = 0;
+        buffer = ""  # divides file content into chunks of packet size
+        next_seqno = 0
+        send = True
+        file_content = ""
+        window = []
+        window_seqno = []
+
+        recv_base = 0
+
+        while True:
+
+            while (len(window) < window_size):  # fills window
+
+                received_pack, addr = self.my_socket.recvfrom(600)
+
+                received_packet = packet(pkd_data=received_pack)
+
+                if (received_packet.checksum == structures.calc_checksum(
+                        received_packet.data)):
+                    ack_packet = structures.ack(seqno=received_packet.seqno, checksum=received_packet.checksum)
+                    client.my_socket.send(ack_packet.pack())
+                    if(not (received_packet.seqno in window_seqno)):
+                        print(received_packet.data)
+                        window.append(received_packet)
+                        window_seqno.append(received_packet.seqno)
+
+                    # seqno = (seqno + 1) % 2
+                #elif (received_packet.seqno in window_seqno):
+                 #   client.my_socket.send(ack_packet.pack())
+
+
+
+
+                #seqno = (seqno + 1) % window_size
+                #packet_number = packet_number + 1
+
+            arrange_window(window,recv_base)
+
+            while(recv_base==window[0].seqno):
+                window.pop(0)
+                window_seqno.remove(recv_base)
+                recv_base=(recv_base+1)/window_size
+
+
+
+
+
+##########################################################
     def recv_go_back_n(self):
         client.recv_file_len(self.my_socket)
         print('Connected to socket #' + str(self.my_socket.getsockname()[1]))
@@ -64,6 +129,22 @@ class Client:
             except socket.timeout:
                 print('Packet# ', exp_pkt_num, ' timed out, re-receiving.')
                 continue
+    #################################
+
+    def stop_wait(self):
+        seqno = 0
+        while True:
+
+            received_pack, addr = client.my_socket.recvfrom(600)
+            received_packet = packet(pkd_data=received_pack)
+            if (received_packet.checksum == structures.calc_checksum(
+                    received_packet.data) and received_packet.seqno == seqno):
+                print(received_packet.data)
+                ack_packet = structures.ack(seqno=seqno, checksum=received_packet.checksum)
+                client.my_socket.send(ack_packet.pack())
+                seqno = (seqno + 1) % 2
+            elif (received_packet.seqno != seqno):
+                client.my_socket.send(ack_packet.pack())
 
     def write_file(self, pkt_list):
         file = open('dl_' + str(self.requested_filename), 'wb')
@@ -82,18 +163,9 @@ print('New port number: ',server_new_port)
 
 client.my_socket.connect((client.server_ip,server_new_port))
 
-seqno = 0
-while True:
 
-    received_pack , addr = client.my_socket.recvfrom(600)
-    received_packet = packet(pkd_data=received_pack)
-    if(received_packet.checksum==structures.calc_checksum(received_packet.data) and received_packet.seqno==seqno):
-        print(received_packet.data)
-        ack_packet = structures.ack(seqno= seqno,checksum=received_packet.checksum)
-        client.my_socket.send(ack_packet.pack())
-        seqno=(seqno+1)%2
-    elif(received_packet.seqno!= seqno):
-        client.my_socket.send(ack_packet.pack())
+client.recv_selective_repeat(5)
+
 
 # client.recv_go_back_n()
 # client.write_file(client.recv_pkt_list)

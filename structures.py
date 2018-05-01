@@ -30,6 +30,8 @@ def calc_checksum(data, type='str'):
 
     return (~checksum & 0xFFFF)
 
+def cmp(a, b):
+    return (a > b) - (a < b)
 
 class ack:
     def __init__(self, seqno=None, checksum=0, pkd_data=None):
@@ -38,6 +40,7 @@ class ack:
             var = self.unpack(pkd_data)
             self.seqno = var[1]
             self.checksum = var[0]
+
 
         else:
             self.seqno = seqno
@@ -49,6 +52,8 @@ class ack:
     def unpack(self,pkd_data):
         return struct.unpack('HI',pkd_data)
 
+    def __lt__(self, other):
+        return cmp(self.seqno, other.seqno) < 0
 
 class packet:
 
@@ -91,3 +96,5 @@ class packet:
         fmt = 'HHI%ds' % str_len
         pkd_packet = struct.pack(fmt, self.checksum, self.length, self.seqno, self.data)
         return pkd_packet
+    def __lt__(self, other):
+        return cmp(self.seqno, other.seqno) < 0

@@ -9,10 +9,10 @@ import enum
 from structures import packet,ack, calc_checksum
 import random
 from socket import timeout
-
+import threading
 
 packet_size = 500
-
+timeout = 10.0
 
 class algorithms(enum.Enum):
     stop_and_wait = 0
@@ -38,47 +38,123 @@ def readfile(filename):
     return file_content
 
 def selective_repeat(server_socket,filename,client_addr):
+
     file_content = readfile(filename)#string containing file content
     packet_number = 0;
     buffer = "" #divides file content into chunks of packet size
     seqno = 0
     send = True
-    server_socket.settimeout(5.0) #sets timeou
+
     lost_list = lost_packets(len(file_content) // packet_size, probability, random_seed)
+    my_threads=[]
     window = []
-
+    received_acks = []
     total_packets = len(file_content) / packet_size
+    lock = threading.Lock()
+    send_base = 0
+    already_acked = [] #seqno
+    not_yet_acked = []
 
-    while (packet_number < total_packets and len(window)<window_size): #fills window
-        start_index = packet_number * packet_size
-        end_index = packet_number * packet_size + packet_size - 1
-        if (end_index < len(file_content)):
-            buffer = file_content[start_index:end_index]
-        else:
-            buffer = file_content[start_index:]
+    while True:
 
-        send_packet = structures.packet(seqno=seqno, data=buffer)
-        packed_packet = send_packet.pack()
-
-        window.append(packed_packet)
+        while (packet_number < total_packets and len(window)<window_size): #fills window
 
 
-        seqno=seqno+1
-        packet_number=packet_number+1
+            start_index = packet_number * packet_size
+            end_index = packet_number * packet_size + packet_size - 1
+            if (end_index < len(file_content)):
+                buffer = file_content[start_index:end_index]
+            else:
+                buffer = file_content[start_index:]
 
-    for i in window:
-        server_socket.sendto(i, client_addr)
+            send_packet = structures.packet(seqno=seqno, data=buffer)
+            packed_packet = send_packet.pack()
+
+            window.append(send_packet)
+            not_yet_acked.append(send_packet)
+
+
+
+            seqno=(seqno+1)%window_size
+            packet_number=packet_number+1
+
+
+        not_yet_acked.sort()
+        my_threads = []
+        
+        for i in window:
+            if(not (i.seqno in already_acked)):
+                server_socket.sendto(i.pack(), client_addr)
+                my_threads.append(threading.Thread(target=receive_ack,args=(server_socket,lock,received_acks)))
+                my_threads[-1].start()
+
+        for thread in my_threads:
+            thread.join()
+
+        my_threads=[]
+        received_acks.sort()
+
+        i=0
+        j=0
+
+        while(len(received_acks)<j and len(not_yet_acked)<i):
+            if(received_acks[j].seqno == not_yet_acked[i].seqno):
+                if(received_acks[j].checksum == not_yet_acked[i].checksum):
+                    already_acked.append(received_acks[j].seqno)
+                    not_yet_acked.pop(i)
+                else:
+                    i=i+1
+                j = j + 1
+            elif(received_acks[j].seqno>not_yet_acked[i].seqno):
+                i=i+1
+            else:
+                j=j+1
+
+        for s in already_acked:
+            if(s==window[0].seqno):
+                window.pop(0)
+                send_base=(s+1)%window_size
+            else:
+                break
 
 
 
 
+
+
+
+
+
+def receive_ack(socket,lock,received_acks):
+    "used for selective repeat"
+
+    lock.acquire()
+
+    try:
+        packed_data = socket.recvfrom(600)
+
+    except timeout:
+        lock.release()
+        return
+
+    received_acks.append(ack(pkd_data=packed_data))
+    lock.release()
+    return
+
+
+
+
+
+
+
+####################################################################
 def send_stop_wait(server_socket,filename,client_addr):
     file_content = readfile(filename)
     packet_number =  0 ;
     buffer= ""
     seqno = 0
     send = True
-    server_socket.settimeout(5.0)
+
 
     lost_list = lost_packets(len(file_content)//packet_size , probability , random_seed)
 
@@ -148,7 +224,7 @@ def send_file_len(socket, address, data,file_len):
         print('Received file length ack...')
 
 
-def go_back_n(file_name, server_socket, client_address, window_size=5):
+def go_back_n(file_name, server_socket, client_address):
     pkt_list = get_packets_from_file(file_name)
     send_file_len(server_socket,client_address,file_name,len(pkt_list))
     flag = False
@@ -180,12 +256,20 @@ def go_back_n(file_name, server_socket, client_address, window_size=5):
 
 
 def send_requested_file(client_addr,serving_port,filename,algorithm_number=algorithms.stop_and_wait):
-    sending_socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    sending_socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) #create new socket for client for sending
     sending_socket.bind((host,serving_port))
+    sending_socket.settimeout(timeout)
     print('Client: '+str(client_addr[1])+' connected... sending file.')
-    #sending_socket.sendto(packet(data=str(serving_port),seqno=0).pack(),client_addr)
-    send_stop_wait(sending_socket,filename,client_addr)
-    # go_back_n(filename,sending_socket,client_addr)
+
+    if algorithm_number==algorithms.stop_and_wait:
+        send_stop_wait(sending_socket,filename,client_addr)
+
+    elif algorithm_number == algorithms.go_back_n :
+        go_back_n(filename,sending_socket,client_addr)
+
+    elif algorithm_number==algorithms.selevtive_repeat:
+        selective_repeat(sending_socket,filename,client_addr)
+
 
 
 s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # Create a socket object (udp)
@@ -229,5 +313,5 @@ while True:
 
     request_packet = structures.packet(pkd_data=request_data) #create a request packet from received data
        #send_stop_wait(s, request_packet.data,addr)
-    send_requested_file(addr,serving_port,request_packet.data,algorithms.stop_and_wait)
-    os.kill(os.getpid(),0)
+    send_requested_file(addr,serving_port,request_packet.data,algorithms.selevtive_repeat)
+    #os.kill(os.getpid(),0)
