@@ -72,7 +72,9 @@ def selective_repeat(server_socket,filename,client_addr):
 
 
 
-def send_stop_wait(server_socket,filename,client_addr):
+def stop_and_wait(server_socket,filename,client_addr):
+    print('Sending using stop and wait.')
+
     file_content = readfile(filename)
     packet_number =  0 ;
     buffer= ""
@@ -83,7 +85,7 @@ def send_stop_wait(server_socket,filename,client_addr):
     lost_list = lost_packets(len(file_content)//packet_size , probability , random_seed)
 
     while(packet_number<len(file_content)/packet_size):
-        
+
 
         if(len(lost_list)>0 and packet_number==int(lost_list[0])):
             lost_list.pop(0)
@@ -135,8 +137,8 @@ def get_packets_from_file(file_name):
         seq_count += 1
     return pkt_list
 
-def send_file_len(socket, address, data,file_len):
 
+def send_file_len(socket, address, data,file_len):
     print('Required file: ' + str(data))
     req_file = str(data)
     get_packets_from_file(req_file)
@@ -149,33 +151,43 @@ def send_file_len(socket, address, data,file_len):
 
 
 def go_back_n(file_name, server_socket, client_address, window_size=5):
-    pkt_list = get_packets_from_file(file_name)
-    send_file_len(server_socket,client_address,file_name,len(pkt_list))
+    print('Sending using go back n.')
+    pkt_list = get_packets_from_file(file_name) # converts file into packets.
+    send_file_len(server_socket,client_address,file_name,len(pkt_list)) # sends required file length to client(packets)
     flag = False
     i = 0
+    server_socket.settimeout(5)
+    lost_pkts = lost_packets(len(pkt_list), probability, random_seed) # lost packets seqno
     while i < len(pkt_list):
-        current_pkt = pkt_list[i:window_size+i]
+        current_pkt = pkt_list[i:window_size+i] # current packets in window
         if window_size+i > len(pkt_list):
             current_pkt = pkt_list[i:]
-        for pkt in current_pkt:
-            pkd_packet = pkt.pack_bytes()
-            server_socket.sendto(pkd_packet,client_address)
-            if flag is True:
+        for pkt in current_pkt: # send all packets in window
+            send = True
+            if pkt.seqno in lost_pkts: # if packet to is lost, don't send.
+                send = False
+                lost_pkts.remove(pkt.seqno)
+            if send:
+                print('Sending packet # ', pkt.seqno)
+                pkd_packet = pkt.pack_bytes()
+                server_socket.sendto(pkd_packet,client_address)
+            if flag is True and not send:
                 flag = False
                 break
-        for pkt in current_pkt:
+        for pkt in current_pkt: # receive acks for sent pacekts in window
             try:
                 ack_pkt = server_socket.recv(600)
                 unpkd_ack = ack(pkd_data=ack_pkt)
-                if unpkd_ack.checksum == pkt.checksum:
+                if unpkd_ack.checksum == pkt.checksum: # if ack received and not corrupted, increment current_pkt
                     i += 1
                     print('Ack# ' + str(unpkd_ack.seqno) + ' received')
                 else:
-                    print('Ack# ', unpkd_ack.seqno,' is corrupted/delayed..')
+                    print('Ack# ', unpkd_ack.seqno,' is corrupted..') # else, go back n.
                     flag = True
                     break
-            except socket.timeout as e:
-                print('Ack # '+str(pkt.seqno)+' ack has timed out....resending')
+            except socket.timeout as e: # if an ack times out, go back n.
+                send = True
+                print('Ack # '+str(pkt.seqno)+' ack has timed out....resending packet')
                 break
 
 
@@ -183,9 +195,15 @@ def send_requested_file(client_addr,serving_port,filename,algorithm_number=algor
     sending_socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     sending_socket.bind((host,serving_port))
     print('Client: '+str(client_addr[1])+' connected... sending file.')
-    #sending_socket.sendto(packet(data=str(serving_port),seqno=0).pack(),client_addr)
-    send_stop_wait(sending_socket,filename,client_addr)
-    # go_back_n(filename,sending_socket,client_addr)
+    # send algorithm used to client to receive according to it.
+    sending_socket.sendto(packet(data=(str(algorithm_number)).encode(),type='bytes').pack_bytes(),client_addr)
+
+    if algorithm_number == algorithms.selevtive_repeat:
+        selective_repeat(sending_socket,filename,client_addr)
+    elif algorithm_number == algorithms.go_back_n:
+        go_back_n(filename,sending_socket,client_addr)
+    else:
+        stop_and_wait(sending_socket,filename,client_addr)
 
 
 s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # Create a socket object (udp)
@@ -211,10 +229,8 @@ while True:
     print('Waiting for connection... ')
     request_data, addr = s.recvfrom(1024)    # receives packet from clients
 
-
     if(addr not in clients): #keep track of clients
         clients.append(addr)
-
 
     while serving_port in used_ports: #searching for a free port
         serving_port=serving_port-1
@@ -222,12 +238,10 @@ while True:
             serving_port=49151
     used_ports.append(serving_port)
     s.sendto(packet(data=str(serving_port), seqno=0).pack(),addr)
-   # pid = os.fork() #fork a new process for the client
 
-
-   # if(pid == 0):
-
-    request_packet = structures.packet(pkd_data=request_data) #create a request packet from received data
-       #send_stop_wait(s, request_packet.data,addr)
-    send_requested_file(addr,serving_port,request_packet.data,algorithms.stop_and_wait)
-    os.kill(os.getpid(),0)
+    pid = os.fork()  # fork a new process for the client
+    if pid == 0:
+        request_packet = structures.packet(pkd_data=request_data)  # create a request packet from received data
+        send_requested_file(addr,serving_port,request_packet.data,algorithms.go_back_n)
+        # send using the algorithm specified
+        os.kill(os.getpid(),0)
