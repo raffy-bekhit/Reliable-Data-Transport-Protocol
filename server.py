@@ -12,8 +12,10 @@ from socket import timeout
 import threading
 import socket
 
+
+
 packet_size = 500
-timeout = 10.0
+time_out = 5.0
 
 class algorithms(enum.Enum):
     stop_and_wait = 0
@@ -22,6 +24,18 @@ class algorithms(enum.Enum):
 
 
 
+def arrange_seqno(seqnos,base):
+
+    temp1 = []
+    temp2 = []
+    seqnos.sort()
+    for i in seqnos:
+        if(i>=base):
+            temp1.append(i)
+        else:
+            temp2.append(i)
+
+    return temp1+temp2
 
 def lost_packets(total_packets,probability,seed):
     "returns list of random packets to be lost for simulation"
@@ -55,7 +69,7 @@ def selective_repeat(server_socket,filename,client_addr):
     send_base = 0
     already_acked = [] #seqno
     not_yet_acked = []
-
+    lose = True
     while True:
 
         while (packet_number < total_packets and len(window)<window_size): #fills window
@@ -85,38 +99,48 @@ def selective_repeat(server_socket,filename,client_addr):
         
         for i in window:
             if(not (i.seqno in already_acked)):
-                server_socket.sendto(i.pack(), client_addr)
-                my_threads.append(threading.Thread(target=receive_ack,args=(server_socket,lock,received_acks)))
-                my_threads[-1].start()
+                if(lose == False or len(lost_list)==0 or i.seqno!=lost_list[0]%window_size):
+
+                    server_socket.sendto(i.pack(), client_addr)
+                    my_threads.append(threading.Thread(target=receive_ack,args=(server_socket,lock,received_acks)))
+                    my_threads[-1].start()
+                else:
+                    lost_list.pop(0)
+                    lose = False
 
         for thread in my_threads:
             thread.join()
 
+        lose = True
         my_threads=[]
         received_acks.sort()
 
         i=0
         j=0
 
-        while(len(received_acks)<j and len(not_yet_acked)<i):
+        while(len(received_acks)>j and len(not_yet_acked)>i):
             if(received_acks[j].seqno == not_yet_acked[i].seqno):
                 if(received_acks[j].checksum == not_yet_acked[i].checksum):
                     already_acked.append(received_acks[j].seqno)
                     not_yet_acked.pop(i)
-                else:
-                    i=i+1
+
+
                 j = j + 1
             elif(received_acks[j].seqno>not_yet_acked[i].seqno):
                 i=i+1
             else:
                 j=j+1
 
-        for s in already_acked:
-            if(s==window[0].seqno):
+        already_acked = arrange_seqno(already_acked,send_base)
+        received_acks=[]
+        while(len(already_acked)>0):
+            if(len(window)>0 and already_acked[0]==window[0].seqno):
                 window.pop(0)
-                send_base=(s+1)%window_size
+                send_base=(already_acked[0]+1)%window_size
+                already_acked.pop(0)
             else:
                 break
+
 
 
 
@@ -130,16 +154,16 @@ def selective_repeat(server_socket,filename,client_addr):
 def receive_ack(socket,lock,received_acks):
     "used for selective repeat"
 
-    lock.acquire()
+    lock.acquire(blocking=True)
 
     try:
-        packed_data = socket.recvfrom(600)
+        packed_data,addr = socket.recvfrom(600)
 
-    except socket.timeout:
+    except Exception:
         lock.release()
         return
-
-    received_acks.append(ack(pkd_data=packed_data))
+    a = ack(pkd_data=packed_data)
+    received_acks.append(a)
     lock.release()
     return
 
@@ -238,7 +262,7 @@ def go_back_n(file_name, server_socket, client_address, window_size=5):
 
     flag = False
     i = 0
-    server_socket.settimeout(5)
+    #server_socket.settimeout(5)
     lost_pkts = lost_packets(len(pkt_list), probability, random_seed) # lost packets seqno
     while i < len(pkt_list):
         current_pkt = pkt_list[i:window_size+i] # current packets in window
@@ -276,11 +300,11 @@ def go_back_n(file_name, server_socket, client_address, window_size=5):
 def send_requested_file(client_addr,serving_port,filename,algorithm_number=algorithms.stop_and_wait):
     sending_socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) #create new socket for client for sending
     sending_socket.bind((host,serving_port))
-    sending_socket.settimeout(timeout)
+    sending_socket.settimeout(time_out)
     print('Client: '+str(client_addr[1])+' connected... sending file.')
 
     # send algorithm used to client to receive according to it.
-    sending_socket.sendto(packet(data=(str(algorithm_number)).encode(),type='bytes').pack_bytes(),client_addr)
+    #sending_socket.sendto(packet(data=(str(algorithm_number)).encode(),type='bytes').pack_bytes(),client_addr)
 
     if algorithm_number == algorithms.selective_repeat:
         selective_repeat(sending_socket,filename,client_addr)

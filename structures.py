@@ -50,7 +50,7 @@ class ack:
         return struct.pack('HI',self.checksum,self.seqno)
 
     def unpack(self,pkd_data):
-        return struct.unpack('HI',pkd_data)
+        return struct.unpack('HI',pkd_data[:])
 
     def __lt__(self, other):
         return cmp(self.seqno, other.seqno) < 0

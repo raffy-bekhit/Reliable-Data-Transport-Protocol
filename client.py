@@ -17,8 +17,8 @@ def arrange_window(window,base):
             temp1.append(i)
         else:
             temp2.append(i)
-    window=temp1+temp2
-    return
+
+    return temp1+temp2
 
 
 class Client:
@@ -58,9 +58,9 @@ class Client:
         self.file_len = int(unpkd.data)
         print('Required file length = ', self.file_len, ' packets.')
     ##################
-    def recv_selective_repeat(self,params):
+    def recv_selective_repeat(self,window_size):
 
-        window_size = params[0]
+        #window_size = params[0]
 
         packet_number = 0;
         buffer = ""  # divides file content into chunks of packet size
@@ -85,9 +85,16 @@ class Client:
                     ack_packet = structures.ack(seqno=received_packet.seqno, checksum=received_packet.checksum)
                     client.my_socket.send(ack_packet.pack())
                     if(not (received_packet.seqno in window_seqno)):
-                        print(received_packet.data)
+                        #print(received_packet.data)
                         window.append(received_packet)
                         window_seqno.append(received_packet.seqno)
+
+                window = arrange_window(window, recv_base)
+
+                while (len(window) > 0 and recv_base == window[0].seqno):
+                        print(window.pop(0).data)
+                        window_seqno.remove(recv_base)
+                        recv_base = (recv_base + 1) % window_size
 
                     # seqno = (seqno + 1) % 2
                 #elif (received_packet.seqno in window_seqno):
@@ -99,12 +106,7 @@ class Client:
                 #seqno = (seqno + 1) % window_size
                 #packet_number = packet_number + 1
 
-            arrange_window(window,recv_base)
 
-            while(recv_base==window[0].seqno):
-                window.pop(0)
-                window_seqno.remove(recv_base)
-                recv_base=(recv_base+1)/window_size
 
 
 
@@ -202,14 +204,14 @@ received_packet = packet(pkd_data=received_pack)
 server_new_port = int(received_packet.data)
 print('New port number: ',server_new_port)
 client.my_socket.connect((client.server_ip,server_new_port))
-pkt,adr = client.my_socket.recvfrom(600)
-pkt = packet(pkd_data=pkt,type='bytes')
-recv_algo = str(pkt.data.decode()).split('.')[1]
-print('Receiving using: ',recv_algo)
-client.recv(recv_algo)
-client.my_socket.close()
+#pkt,adr = client.my_socket.recvfrom(600)
+#pkt = packet(pkd_data=pkt,type='bytes')
+#recv_algo = str(pkt.data.decode()).split('.')[1]
+#print('Receiving using: ',recv_algo)
+#client.recv(recv_algo)
+#client.my_socket.close()
 
-#client.recv_selective_repeat(5)
+client.recv_selective_repeat(5)
 
 
 # seqno = 0
