@@ -3,7 +3,7 @@ import struct
 import threading
 from structures import packet, ack, calc_checksum
 import structures
-
+import random
 def resend(my_socket,packet):
     my_socket.send(packet())
 
@@ -30,6 +30,13 @@ class Client:
         self.my_socket.send(request_pack)
         print('File: ' + str(self.requested_filename) + ' has been requested from the server.')
 
+    def get_corrupted_packets(self,packets_num, probability, seed):
+        random.seed(seed)
+        corrupted = random.sample(range(packets_num), int(probability * packets_num))
+        corrupted = [i for i in corrupted]
+        corrupted.sort()
+        return corrupted
+
     def recv_file_len(self, socket):
         pkt, adr = socket.recvfrom(600)
         unpkd = packet(pkd_data=pkt,type='bytes')
@@ -41,11 +48,15 @@ class Client:
     def recv_go_back_n(self):
         client.recv_file_len(self.my_socket)
         print('Connected to socket #' + str(self.my_socket.getsockname()[1]))
+        corrupted = self.get_corrupted_packets(self.file_len,0.2,5)
         exp_pkt_num = 0
         while True:
             try:
                 pkt, adr = self.my_socket.recvfrom(600)
                 recv_pkt = packet(pkd_data=pkt, type='bytes')
+                if recv_pkt.seqno in corrupted:
+                    recv_pkt.checksum = recv_pkt.checksum-10
+                    corrupted.remove(recv_pkt.seqno)
                 if adr[0] == self.server_ip:
                     print('Received packet# '+str(recv_pkt.seqno)) # receive packets initally.
                     cs = recv_pkt.checksum
@@ -57,6 +68,8 @@ class Client:
                         self.my_socket.send(pkd_ack) # and send ack
                         exp_pkt_num += 1
                     else:  # else discard packet, will be received again.
+                        if recv_pkt.checksum != calc_checksum(recv_pkt.data,type='bytes'):
+                            print('Packet # ', recv_pkt.seqno,'is corrupted, re-receiving')
                         continue
                 if self.file_len == len(self.recv_pkt_list): # if all file received, break.
                     print('File received successfully.')
