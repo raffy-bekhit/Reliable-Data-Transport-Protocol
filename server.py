@@ -12,16 +12,14 @@ from socket import timeout
 import threading
 import socket
 
-
-
 packet_size = 500
 time_out = 5.0
+
 
 class algorithms(enum.Enum):
     stop_and_wait = 0
     go_back_n=1
     selective_repeat = 2
-
 
 
 def arrange_seqno(seqnos,base):
@@ -37,6 +35,7 @@ def arrange_seqno(seqnos,base):
 
     return temp1+temp2
 
+
 def lost_packets(total_packets,probability,seed):
     "returns list of random packets to be lost for simulation"
     random.seed(seed)
@@ -45,6 +44,7 @@ def lost_packets(total_packets,probability,seed):
     list.sort()
     return list
 
+
 def readfile(filename):
     "returns content of file as string"
     file = open(filename, 'r')
@@ -52,8 +52,19 @@ def readfile(filename):
     file.close()
     return file_content
 
-def selective_repeat(server_socket,filename,client_addr):
+def send_window_size(server_socket, window_size,client_addr):
+    pkt = packet(data=str(window_size))
+    server_socket.sendto(pkt.pack(),client_addr)
+    ack, add = server_socket.recvfrom(600)
+    ack_p = packet(pkd_data=ack, type='ack')
+    if ack_p.checksum == calc_checksum(str(window_size)):
+        print('Received file window size ack...')
 
+
+def selective_repeat(server_socket,filename,client_addr):
+    print('Sending using selective reapeat.')
+    send_file_len(server_socket,client_addr,filename)
+    send_window_size(server_socket,window_size,client_addr)
     file_content = readfile(filename)#string containing file content
     packet_number = 0;
     buffer = "" #divides file content into chunks of packet size
@@ -71,12 +82,9 @@ def selective_repeat(server_socket,filename,client_addr):
     not_yet_acked = []
     lose = True
     while True:
-
         while (packet_number < total_packets and len(window)<window_size): #fills window
-
-
             start_index = packet_number * packet_size
-            end_index = packet_number * packet_size + packet_size - 1
+            end_index = packet_number * packet_size + packet_size
             if (end_index < len(file_content)):
                 buffer = file_content[start_index:end_index]
             else:
@@ -88,15 +96,12 @@ def selective_repeat(server_socket,filename,client_addr):
             window.append(send_packet)
             not_yet_acked.append(send_packet)
 
-
-
             seqno=(seqno+1)%window_size
             packet_number=packet_number+1
 
-
         not_yet_acked.sort()
         my_threads = []
-        
+
         for i in window:
             if(not (i.seqno in already_acked)):
                 if(lose == False or len(lost_list)==0 or i.seqno!=lost_list[0]%window_size):
@@ -123,8 +128,6 @@ def selective_repeat(server_socket,filename,client_addr):
                 if(received_acks[j].checksum == not_yet_acked[i].checksum):
                     already_acked.append(received_acks[j].seqno)
                     not_yet_acked.pop(i)
-
-
                 j = j + 1
             elif(received_acks[j].seqno>not_yet_acked[i].seqno):
                 i=i+1
@@ -142,23 +145,12 @@ def selective_repeat(server_socket,filename,client_addr):
                 break
 
 
-
-
-
-
-
-
-
-
-
 def receive_ack(socket,lock,received_acks):
     "used for selective repeat"
 
     lock.acquire(blocking=True)
-
     try:
         packed_data,addr = socket.recvfrom(600)
-
     except Exception:
         lock.release()
         return
@@ -168,28 +160,18 @@ def receive_ack(socket,lock,received_acks):
     return
 
 
-
-
-
-
-
-####################################################################
-
 def stop_and_wait(server_socket,filename,client_addr):
+    send_file_len(server_socket,client_addr,filename)
     print('Sending using stop and wait.')
-
 
     file_content = readfile(filename)
     packet_number =  0 ;
     buffer= ""
     seqno = 0
     send = True
-
-
     lost_list = lost_packets(len(file_content)//packet_size , probability , random_seed)
 
     while(packet_number<len(file_content)/packet_size):
-
 
         if(len(lost_list)>0 and packet_number==int(lost_list[0])):
             lost_list.pop(0)
@@ -197,7 +179,7 @@ def stop_and_wait(server_socket,filename,client_addr):
         if(send):
             send=False
             start_index = packet_number*packet_size
-            end_index = packet_number * packet_size + packet_size - 1
+            end_index = packet_number * packet_size + packet_size
             if(end_index<len(file_content)):
                 buffer = file_content[start_index:end_index]
             else:
@@ -209,7 +191,6 @@ def stop_and_wait(server_socket,filename,client_addr):
 
         try:
             ack_pack , addr = server_socket.recvfrom(600)
-
 
         except timeout:
             send=True #resend
@@ -242,23 +223,28 @@ def get_packets_from_file(file_name):
     return pkt_list
 
 
-def send_file_len(socket, address, data,file_len):
+def send_file_len(socket, address, data):
     print('Required file: ' + str(data))
     req_file = str(data)
-    get_packets_from_file(req_file)
+    pkts = get_packets_from_file(req_file)
+    file_len = len(pkts)
     pkt = packet(seqno=0, data=((str(file_len)).encode()),type='bytes').pack_bytes()
     socket.sendto(pkt, address)
-    ack, add = socket.recvfrom(600)
-    ack_p = packet(pkd_data=ack, type='ack')
-    if ack_p.checksum == calc_checksum(str(file_len)):
-        print('Received file length ack...')
-
+    while True:
+        try:
+            ack, add = socket.recvfrom(600)
+            ack_p = packet(pkd_data=ack, type='ack')
+            if ack_p.checksum == calc_checksum(str(file_len)):
+                print('Received file length ack...')
+                break
+        except socket.timeout:
+            continue
 
 
 def go_back_n(file_name, server_socket, client_address, window_size=5):
     print('Sending using go back n.')
     pkt_list = get_packets_from_file(file_name) # converts file into packets.
-    send_file_len(server_socket,client_address,file_name,len(pkt_list)) # sends required file length to client(packets)
+    send_file_len(server_socket,client_address,file_name) # sends required file length to client(packets)
 
     flag = False
     i = 0
@@ -302,10 +288,8 @@ def send_requested_file(client_addr,serving_port,filename,algorithm_number=algor
     sending_socket.bind((host,serving_port))
     sending_socket.settimeout(time_out)
     print('Client: '+str(client_addr[1])+' connected... sending file.')
-
     # send algorithm used to client to receive according to it.
-    #sending_socket.sendto(packet(data=(str(algorithm_number)).encode(),type='bytes').pack_bytes(),client_addr)
-
+    sending_socket.sendto(packet(data=(str(algorithm_number)).encode(),type='bytes').pack_bytes(),client_addr)
     if algorithm_number == algorithms.selective_repeat:
         selective_repeat(sending_socket,filename,client_addr)
     elif algorithm_number == algorithms.go_back_n:
@@ -324,39 +308,43 @@ window_size = int(file.readline()) # in datagrams
 random_seed = int(file.readline())
 probability = float(file.readline())
 
-
 s.bind((host, port))        # Bind to the port
 #s.setblocking(1)
 clients = []  # list of online clients
 
-
 serving_port = 49151  # port used to send the file
 used_ports=[]  # list of ports used to send the file
 
-
+req_err = True
 while True:
     print('Waiting for connection... ')
     request_data, addr = s.recvfrom(1024)    # receives packet from clients
+    pkt = packet(pkd_data=request_data)
+    if req_err:
+        req_err = False
+        pkt.checksum=pkt.checksum-10
+    if pkt.checksum == calc_checksum(pkt.data):
+        ack_pkt = ack(seqno=0, checksum=calc_checksum(pkt.data))
+        s.sendto(ack_pkt.pack(),addr)
+        print('File request received, sending ack..')
+    else:
+        print('File request Corrupted..')
+        continue
 
-    if(addr not in clients): #keep track of clients
+    if(addr not in clients): # keep track of clients
         clients.append(addr)
 
-    while serving_port in used_ports: #searching for a free port
+    while serving_port in used_ports: # searching for a free port
         serving_port=serving_port-1
         if(serving_port<1024):
             serving_port=49151
     used_ports.append(serving_port)
     s.sendto(packet(data=str(serving_port), seqno=0).pack(),addr)
 
-
-    request_packet = structures.packet(pkd_data=request_data) #create a request packet from received data
-       #send_stop_wait(s, request_packet.data,addr)
-    send_requested_file(addr,serving_port,request_packet.data,algorithms.selective_repeat)
-    #os.kill(os.getpid(),0)
-
-    #pid = os.fork()  # fork a new process for the client
-    #if pid == 0:
-    request_packet = structures.packet(pkd_data=request_data)  # create a request packet from received data
-    send_requested_file(addr,serving_port,request_packet.data,algorithms.selective_repeat)
+    pid = os.fork()  # fork a new process for the client
+    if pid == 0:
+        request_packet = structures.packet(pkd_data=request_data)  # create a request packet from received data
+        send_requested_file(addr,serving_port,request_packet.data,algorithms.go_back_n)
         # send using the algorithm specified
-        #os.kill(os.getpid(),0)
+        print('File Sent..')
+        os.kill(os.getpid(),0)
