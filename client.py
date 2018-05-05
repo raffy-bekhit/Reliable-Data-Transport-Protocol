@@ -4,6 +4,8 @@ import threading
 from structures import packet, ack, calc_checksum
 import structures
 import random
+import os
+
 def resend(my_socket,packet):
     my_socket.send(packet())
 
@@ -53,6 +55,7 @@ class Client:
                 print('Request ack timed out.., resending')
                 continue
         print('File: ' + str(self.requested_filename) + ' has been requested from the server.')
+        self.my_socket.settimeout(None)
 
     def get_corrupted_packets(self,packets_num, probability, seed):
         random.seed(seed)
@@ -94,7 +97,10 @@ class Client:
 
         recv_base = 0
         corrupted = self.get_corrupted_packets(self.file_len,0.2,5)
-        file = open('dl_sr_'+str(self.requested_filename),'w')
+        filename = './Clients/'+str(self.server_port)+'/dl_sr_' + str(self.requested_filename)
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        file = open(filename,'w')
         while True:
 
             while (len(window) < window_size):  # fills window
@@ -170,9 +176,13 @@ class Client:
             except socket.timeout:
                 print('Packet# ', exp_pkt_num, ' timed out, re-receiving.')
                 continue
+        self.write_file(self.recv_pkt_list)
 
     def write_file(self, pkt_list):
-        file = open('dl_gbn_' + str(self.requested_filename), 'wb')
+        filename = './Clients/'+str(self.server_port)+'/dl_gbn_' + str(self.requested_filename)
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        file = open(filename, 'wb')
         for pkt in pkt_list:
             file.write(pkt.data)
         print('File Written!')
@@ -182,7 +192,10 @@ class Client:
         seqno = 0
         pkt_num = 0
         corrupted = self.get_corrupted_packets(self.file_len,0.2,5)
-        file = open('dl_sw_'+str(self.requested_filename),'w')
+        filename = './Clients/'+str(self.server_port)+'/dl_saw_' + str(self.requested_filename)
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        file = open(filename,'w')
         while True:
 
             received_pack , addr = client.my_socket.recvfrom(600)
@@ -218,6 +231,7 @@ client.send_request()
 received_pack , addr = client.my_socket.recvfrom(600)
 received_packet = packet(pkd_data=received_pack)
 server_new_port = int(received_packet.data)
+client.server_port = server_new_port
 print('New port number: ',server_new_port)
 client.my_socket.connect((client.server_ip,server_new_port))
 pkt,adr = client.my_socket.recvfrom(600)
