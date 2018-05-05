@@ -81,6 +81,7 @@ def selective_repeat(server_socket,filename,client_addr):
     already_acked = [] #seqno
     not_yet_acked = []
     lose = True
+    counter = 0
     while True:
         while (packet_number < total_packets and len(window)<window_size): #fills window
             start_index = packet_number * packet_size
@@ -104,9 +105,10 @@ def selective_repeat(server_socket,filename,client_addr):
 
         for i in window:
             if(not (i.seqno in already_acked)):
-                if(lose == False or len(lost_list)==0 or i.seqno!=lost_list[0]%window_size):
+                if(lose == False or len(lost_list)==0 or counter!=lost_list[0]%window_size):
 
                     server_socket.sendto(i.pack(), client_addr)
+                    counter=counter+1
                     my_threads.append(threading.Thread(target=receive_ack,args=(server_socket,lock,received_acks)))
                     my_threads[-1].start()
                 else:
@@ -344,7 +346,7 @@ while True:
     pid = os.fork()  # fork a new process for the client
     if pid == 0:
         request_packet = structures.packet(pkd_data=request_data)  # create a request packet from received data
-        send_requested_file(addr,serving_port,request_packet.data,algorithms.go_back_n)
+        send_requested_file(addr,serving_port,request_packet.data,algorithms.selective_repeat)
         # send using the algorithm specified
         print('File Sent..')
         os.kill(os.getpid(),0)
