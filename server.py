@@ -11,6 +11,7 @@ import random
 from socket import timeout
 import threading
 import socket
+import sys
 
 packet_size = 500
 time_out = 5.0
@@ -300,6 +301,18 @@ def send_requested_file(client_addr,serving_port,filename,algorithm_number=algor
         stop_and_wait(sending_socket,filename,client_addr)
 
 
+def get_algorithm():
+    algorithm = algorithms.stop_and_wait
+    if len(sys.argv) == 1:
+        algorithm = algorithms.stop_and_wait
+    elif sys.argv[1] == '-saw':
+        algorithm = algorithms.stop_and_wait
+    elif sys.argv[1] == '-gbn':
+        algorithm = algorithms.go_back_n
+    elif sys.argv[1] == '-sr':
+        algorithm = algorithms.selective_repeat
+    return algorithm
+
 
 s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # Create a socket object (udp)
 host = '127.0.0.1' # localhost ip
@@ -346,7 +359,8 @@ while True:
     pid = os.fork()  # fork a new process for the client
     if pid == 0:
         request_packet = structures.packet(pkd_data=request_data)  # create a request packet from received data
-        send_requested_file(addr,serving_port,request_packet.data,algorithms.selective_repeat)
+        algorithm = get_algorithm()
+        send_requested_file(addr,serving_port,request_packet.data,algorithm)
         # send using the algorithm specified
         print('File Sent..')
         os.kill(os.getpid(),0)

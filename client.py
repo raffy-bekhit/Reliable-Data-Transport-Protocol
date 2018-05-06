@@ -4,7 +4,7 @@ import threading
 from structures import packet, ack, calc_checksum
 import structures
 import random
-import os
+import os,sys
 
 def resend(my_socket,packet):
     my_socket.send(packet())
@@ -96,7 +96,7 @@ class Client:
         window_seqno = []
 
         recv_base = 0
-        corrupted = self.get_corrupted_packets(self.file_len,0.2,5)
+        corrupted = self.get_corrupted_packets(self.file_len,0.002,5)
         filename = './Clients/'+str(self.server_port)+'/dl_sr_' + str(self.requested_filename)
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
@@ -147,7 +147,7 @@ class Client:
     def recv_go_back_n(self):
         client.recv_file_len(self.my_socket)
         print('Connected to socket #' + str(self.my_socket.getsockname()[1]))
-        corrupted = self.get_corrupted_packets(self.file_len,0.2,5)
+        corrupted = self.get_corrupted_packets(self.file_len,0.002,5)
         exp_pkt_num = 0
         while True:
             try:
@@ -191,7 +191,7 @@ class Client:
         client.recv_file_len(self.my_socket)
         seqno = 0
         pkt_num = 0
-        corrupted = self.get_corrupted_packets(self.file_len,0.2,5)
+        corrupted = self.get_corrupted_packets(self.file_len,0.002,5)
         filename = './Clients/'+str(self.server_port)+'/dl_saw_' + str(self.requested_filename)
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
@@ -225,8 +225,9 @@ class Client:
             print("error.. no such algorithm")
 
 
-
 client = Client('client.in')
+if len(sys.argv) == 2:
+    client.requested_filename = sys.argv[1]
 client.send_request()
 received_pack , addr = client.my_socket.recvfrom(600)
 received_packet = packet(pkd_data=received_pack)
