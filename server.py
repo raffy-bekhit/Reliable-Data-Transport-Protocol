@@ -48,7 +48,7 @@ def lost_packets(total_packets,probability,seed):
 
 def readfile(filename):
     "returns content of file as string"
-    file = open(filename, 'r')
+    file = open(filename, 'rb')
     file_content = file.read()
     file.close()
     return file_content
@@ -68,7 +68,7 @@ def selective_repeat(server_socket,filename,client_addr):
     send_window_size(server_socket,window_size,client_addr)
     file_content = readfile(filename)#string containing file content
     packet_number = 0;
-    buffer = "" #divides file content into chunks of packet size
+    # buffer = "" #divides file content into chunks of packet size
     seqno = 0
     send = True
 
@@ -92,8 +92,8 @@ def selective_repeat(server_socket,filename,client_addr):
             else:
                 buffer = file_content[start_index:]
 
-            send_packet = structures.packet(seqno=seqno, data=buffer)
-            packed_packet = send_packet.pack()
+            send_packet = structures.packet(seqno=seqno, data=buffer,type='bytes')
+            packed_packet = send_packet.pack_bytes()
 
             window.append(send_packet)
             not_yet_acked.append(send_packet)
@@ -108,7 +108,7 @@ def selective_repeat(server_socket,filename,client_addr):
             if(not (i.seqno in already_acked)):
                 if(lose == False or len(lost_list)==0 or counter!=lost_list[0]%window_size):
 
-                    server_socket.sendto(i.pack(), client_addr)
+                    server_socket.sendto(i.pack_bytes(), client_addr)
                     counter=counter+1
                     my_threads.append(threading.Thread(target=receive_ack,args=(server_socket,lock,received_acks)))
                     my_threads[-1].start()
@@ -169,7 +169,6 @@ def stop_and_wait(server_socket,filename,client_addr):
 
     file_content = readfile(filename)
     packet_number =  0 ;
-    buffer= ""
     seqno = 0
     send = True
     lost_list = lost_packets(len(file_content)//packet_size , probability , random_seed)
@@ -188,8 +187,8 @@ def stop_and_wait(server_socket,filename,client_addr):
             else:
                 buffer = file_content[start_index:]
 
-            send_packet = structures.packet(seqno=seqno,data=buffer)
-            packed_packet = send_packet.pack()
+            send_packet = structures.packet(seqno=seqno,data=buffer,type='bytes')
+            packed_packet = send_packet.pack_bytes()
             server_socket.sendto(packed_packet,client_addr)
 
         try:

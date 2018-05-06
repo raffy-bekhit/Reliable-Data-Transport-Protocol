@@ -4,7 +4,7 @@ import threading
 from structures import packet, ack, calc_checksum
 import structures
 import random
-import os,sys
+import os,sys,time
 
 def resend(my_socket,packet):
     my_socket.send(packet())
@@ -96,23 +96,23 @@ class Client:
         window_seqno = []
 
         recv_base = 0
-        corrupted = self.get_corrupted_packets(self.file_len,0.002,5)
+        corrupted = self.get_corrupted_packets(self.file_len,0.05,5)
         filename = './Clients/'+str(self.server_port)+'/dl_sr_' + str(self.requested_filename)
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
-        file = open(filename,'w')
+        file = open(filename,'wb')
         while True:
 
             while (len(window) < window_size):  # fills window
 
                 received_pack, addr = self.my_socket.recvfrom(600)
 
-                received_packet = packet(pkd_data=received_pack)
+                received_packet = packet(pkd_data=received_pack,type='bytes')
                 if received_packet.seqno in corrupted:
                     received_packet.checksum = received_packet.checksum - 10
                     corrupted.remove(received_packet.seqno)
                 if (received_packet.checksum == structures.calc_checksum(
-                        received_packet.data)):
+                        received_packet.data,type='bytes')):
                     ack_packet = structures.ack(seqno=received_packet.seqno, checksum=received_packet.checksum)
                     client.my_socket.send(ack_packet.pack())
                     if(not (received_packet.seqno in window_seqno)):
@@ -147,7 +147,7 @@ class Client:
     def recv_go_back_n(self):
         client.recv_file_len(self.my_socket)
         print('Connected to socket #' + str(self.my_socket.getsockname()[1]))
-        corrupted = self.get_corrupted_packets(self.file_len,0.002,5)
+        corrupted = self.get_corrupted_packets(self.file_len,0.05,5)
         exp_pkt_num = 0
         while True:
             try:
@@ -191,19 +191,20 @@ class Client:
         client.recv_file_len(self.my_socket)
         seqno = 0
         pkt_num = 0
-        corrupted = self.get_corrupted_packets(self.file_len,0.002,5)
+        corrupted = self.get_corrupted_packets(self.file_len,0.05,5)
         filename = './Clients/'+str(self.server_port)+'/dl_saw_' + str(self.requested_filename)
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
-        file = open(filename,'w')
+        file = open(filename,'wb')
         while True:
 
             received_pack , addr = client.my_socket.recvfrom(600)
-            received_packet = packet(pkd_data=received_pack)
+            received_packet = packet(pkd_data=received_pack,type='bytes')
             if received_packet.seqno in corrupted:
                 received_packet.checksum = received_packet.checksum - 10
                 corrupted.remove(received_packet.seqno)
-            if(received_packet.checksum==structures.calc_checksum(received_packet.data) and received_packet.seqno==seqno):
+            if(received_packet.checksum==structures.calc_checksum(received_packet.data,type='bytes')
+                    and received_packet.seqno==seqno):
                 print(received_packet.data)
                 file.write(received_packet.data)
                 ack_packet = structures.ack(seqno= seqno,checksum=received_packet.checksum)
@@ -228,6 +229,7 @@ class Client:
 client = Client('client.in')
 if len(sys.argv) == 2:
     client.requested_filename = sys.argv[1]
+start=time.time()
 client.send_request()
 received_pack , addr = client.my_socket.recvfrom(600)
 received_packet = packet(pkd_data=received_pack)
@@ -241,7 +243,9 @@ recv_algo = str(pkt.data.decode()).split('.')[1]
 print('Receiving using: ',recv_algo)
 client.recv(recv_algo)
 client.my_socket.close()
-
+end = time.time()
+time_elapsed = end - start
+print('Time elapsed= ',time_elapsed)
 # client.recv_selective_repeat(5)
 
 
